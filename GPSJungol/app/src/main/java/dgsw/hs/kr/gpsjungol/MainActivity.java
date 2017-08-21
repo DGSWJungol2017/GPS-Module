@@ -1,41 +1,41 @@
 package dgsw.hs.kr.gpsjungol;
 
+import android.Manifest;
 import android.content.Context;
-import android.location.Location;
-import android.location.LocationListener;
+import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.LocationManager;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.Message;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.ToggleButton;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserFactory;
-
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
+import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 public class MainActivity extends AppCompatActivity {
+
+    String xml;
+
+    private GpsInfo gpsInfo;
 
     TextView tv;
 
@@ -43,14 +43,215 @@ public class MainActivity extends AppCompatActivity {
     Button btn2;
     Button btn3;
 
+    String cityName = "";
+
+    int cityCode = 0;
+
+    HashMap<String, Object> hashMap = new HashMap<String, Object>();
+    HashMap<Integer, ArrayList> nodeMap = new HashMap<Integer, ArrayList>();
+
+    HashMap<String, Object> tempMap = new HashMap<String, Object>();
+    HashMap<String, Object> destMap = new HashMap<String, Object>();         // Key : 목적지 한글명 Value : routeid
+
     StringBuilder sb;
 
-    String xml;
+    ArrayList<String> stationList = new ArrayList<String>();
+    ArrayList<String> nodeIdList = new ArrayList<String>();
+    ArrayList<String> busNoList = new ArrayList<String>();
+    ArrayList<String> destList = new ArrayList<String>();
+
+    ArrayAdapter arrayAdapter;
+    ArrayAdapter arrayAdapter2;
+    ArrayAdapter arrayAdapter3;
+
+    Spinner spinner1;
+    Spinner spinner2;
+    Spinner spinner3;
+
+    String[][] stationString = new String[10][10];
+    HashMap<String, String> routeMap = new HashMap<String, String>();
+
+    private static final int MAX_STR = 300;
+
+    int idx = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        arrayAdapter = new ArrayAdapter(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, stationList);
+        arrayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        arrayAdapter2 = new ArrayAdapter(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, busNoList);
+        arrayAdapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        spinner1 = (Spinner)findViewById(R.id.stationSpinner);
+        spinner1.setAdapter(arrayAdapter);
+
+        spinner2 = (Spinner)findViewById(R.id.busSpinner);
+        spinner2.setAdapter(arrayAdapter2);
+
+        spinner3 = (Spinner)findViewById(R.id.destSpinner);
+        spinner3.setAdapter(arrayAdapter3);
+
+        spinner1.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, final int position, long id) {
+
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Looper.prepare();
+
+                            boolean isDup = false;
+
+                            busNoList = new ArrayList<String>();
+
+                            String stationName = stationString[position][0];
+                            String[] tempString;
+
+                            tempString = stationString[position];
+
+                            for(int i = 1; stationString[position][i] != null; i++) {
+                                BusNumberParser parser = new BusNumberParser();
+                                ArrayList<HashMap<String, Object>> arrayList = parser.parser(cityCode, tempString[i]);
+
+                                for(int j = 0; j < arrayList.size(); j++) {
+                                    tempMap = arrayList.get(j);
+
+                                    for(int k = 0; k < busNoList.size(); k++) {
+                                        if(busNoList.get(k).equals(tempMap.get("routeno"))) {
+                                            isDup = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if(!isDup) {
+                                        routeMap.put(tempMap.get("routeno").toString(), tempMap.get("routeid").toString());
+                                        busNoList.add(tempMap.get("routeno").toString());
+                                    }
+                                }
+                            }
+
+                            arrayAdapter2 = new ArrayAdapter(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, busNoList);
+
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    spinner2.setAdapter(arrayAdapter2);
+                                }
+                            });
+                        } catch (Exception e) {
+                            Toast.makeText(getApplicationContext(), "인터넷이나 GPS 문제이거나, 지원하지 않는 장소입니다.", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }).start();
+
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+
+            }
+        });
+
+        spinner2.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, final int position, long id) {
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Looper.prepare();
+
+                            destList = new ArrayList<String>();
+
+                            BusRouteParser parser = new BusRouteParser();
+                            ArrayList<HashMap<String, Object>> arrayList = parser.parser(cityCode, routeMap.get(spinner2.getSelectedItem()).toString());
+
+                            HashMap<String, Object> dummyMap = new HashMap<String, Object>();
+
+                            for(int i = 0; i < arrayList.size(); i++) {
+                                dummyMap = arrayList.get(i);
+
+                                destMap.put(dummyMap.get("nodenm").toString(), dummyMap.get("nodeid"));
+                                destList.add(dummyMap.get("nodenm").toString());
+                            }
+
+                            arrayAdapter3 = new ArrayAdapter(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, destList);
+
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    spinner3.setAdapter(arrayAdapter3);
+                                }
+                            });
+                        } catch (Exception e) {
+                            Toast.makeText(getApplicationContext(), "인터넷이나 GPS 문제이거나, 지원하지 않는 장소입니다.", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }).start();
+
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+
+            }
+        });
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+
+        } else {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                //사용자가 다시 보지 않기에 체크를 하지 않고, 권한 설정을 거절한 이력이 있는 경우
+            } else {
+                //사용자가 다시 보지 않기에 체크하고, 권한 설정을 거절한 이력이 있는 경우
+            }
+
+            //사용자에게 접근권한 설정을 요구하는 다이얼로그를 띄운다.
+            //만약 사용자가 다시 보지 않기에 체크를 했을 경우엔 권한 설정 다이얼로그가 뜨지 않고,
+            //곧바로 OnRequestPermissionResult가 실행된다.
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 0);
+
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+
+        } else {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
+                //사용자가 다시 보지 않기에 체크를 하지 않고, 권한 설정을 거절한 이력이 있는 경우
+            } else {
+                //사용자가 다시 보지 않기에 체크하고, 권한 설정을 거절한 이력이 있는 경우
+            }
+
+            //사용자에게 접근권한 설정을 요구하는 다이얼로그를 띄운다.
+            //만약 사용자가 다시 보지 않기에 체크를 했을 경우엔 권한 설정 다이얼로그가 뜨지 않고,
+            //곧바로 OnRequestPermissionResult가 실행된다.
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 0);
+
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) == PackageManager.PERMISSION_GRANTED) {
+
+        } else {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.INTERNET)) {
+                //사용자가 다시 보지 않기에 체크를 하지 않고, 권한 설정을 거절한 이력이 있는 경우
+            } else {
+                //사용자가 다시 보지 않기에 체크하고, 권한 설정을 거절한 이력이 있는 경우
+            }
+
+            //사용자에게 접근권한 설정을 요구하는 다이얼로그를 띄운다.
+            //만약 사용자가 다시 보지 않기에 체크를 했을 경우엔 권한 설정 다이얼로그가 뜨지 않고,
+            //곧바로 OnRequestPermissionResult가 실행된다.
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.INTERNET}, 0);
+
+        }
+
 
         // Location 제공자에서 정보를 얻어오기(GPS)
         // 1. Location을 사용하기 위한 권한을 얻어와야한다 AndroidManifest.xml
@@ -77,29 +278,13 @@ public class MainActivity extends AppCompatActivity {
         btn1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                try{
+                try {
+                    gpsInfo = new GpsInfo(MainActivity.this);
                     //if(tb.isChecked()){
-                        tv.setText("수신중..");
-                        // GPS 제공자의 정보가 바뀌면 콜백하도록 리스너 등록하기~!!!
-                        lm.requestLocationUpdates((String)LocationManager.GPS_PROVIDER, (long)100, (float)1, mLocationListener);
-                    //Toast.makeText(getApplicationContext(), "1" + (String)LocationManager.GPS_PROVIDER, Toast.LENGTH_SHORT).show();
-                        lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, // 등록할 위치제공자
-                                100, // 통지사이의 최소 시간간격 (miliSecond)
-                                1, // 통지사이의 최소 변경거리 (m)
-                                mLocationListener);
+                    tv.setText("위도 : " + gpsInfo.getLatitude() + "  경도 : " + gpsInfo.getLongitude());
 
-                    //Toast.makeText(getApplicationContext(), "2" + LocationManager.NETWORK_PROVIDER, Toast.LENGTH_SHORT).show();
-                    /*}else{
-                        Toast.makeText(getApplicationContext(), "??", Toast.LENGTH_SHORT).show();
-                        tv.setText("위치정보 미수신중");
-                        Toast.makeText(getApplicationContext(), "5", Toast.LENGTH_SHORT).show();
-                        lm.removeUpdates(mLocationListener);  //  미수신할때는 반드시 자원해체를 해주어야 한다.
-                        Toast.makeText(getApplicationContext(), "6", Toast.LENGTH_SHORT).show();
-                    }*/
-                }catch(SecurityException ex){
-
-                }catch(Exception e) {
-
+                } catch (Exception e) {
+                    Toast.makeText(getApplicationContext(), "ERROR!", Toast.LENGTH_SHORT).show();
                 }
             }
         });
@@ -107,52 +292,113 @@ public class MainActivity extends AppCompatActivity {
         btn2.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                new Thread() {
+                new Thread(new Runnable() {
+                    @Override
                     public void run() {
                         try {
-                            Handler mHandler = new Handler(Looper.getMainLooper());
-                            mHandler.postDelayed(new Runnable() {
-                                @Override
-                                public void run() {
-                                    // 내용
+                            cityName = "";
+                            double latitude;
+                            double longitude;
 
+                            Looper.prepare();
+
+                            gpsInfo = new GpsInfo(MainActivity.this);
+
+                            if(gpsInfo.isGetLocation()) {
+                                latitude = gpsInfo.getLatitude();
+                                longitude = gpsInfo.getLongitude();
+
+                                BusStopParser parser = new BusStopParser();
+                                ArrayList<HashMap<String, Object>> arrayList = parser.parser(latitude, longitude);
+
+                                if(arrayList.isEmpty()) {
+                                    Toast.makeText(MainActivity.this, "근처에 정류장이 없습니다!", Toast.LENGTH_SHORT).show();
+                                } else {
+
+                                    String dupCheck = "";
+
+                                    Geocoder mGeoCoder = new Geocoder(MainActivity.this, Locale.KOREA);
+
+                                    List<Address> addrs = mGeoCoder.getFromLocation(latitude, longitude, 1);
+                                    final String city = addrs.get(0).getLocality();
+
+                                    boolean isDup = false;
+
+                                    cityCode = transformCityName(city);
+
+                                    stationList = new ArrayList<String>();
+                                    nodeIdList = new ArrayList<String>();
+
+                                    ArrayList<String> tempArray = new ArrayList<String>();
+                                    int tempIdx = 0;
+
+                                    for (int i = 0; i < arrayList.size(); i++) {
+                                        hashMap = arrayList.get(i);
+
+                                        if(!(hashMap.get("citycode").toString().equals(cityCode + ""))) {
+                                            continue;
+                                        }
+
+                                        boolean isDone = false;
+
+                                        String nodenm = hashMap.get("nodenm").toString();
+                                        String nodeid = hashMap.get("nodeid").toString();
+
+                                        for(int j = 0; ; j++) {
+                                            if(stationString[j][0] == null) {
+                                                for(int k = 0; ; k++) {
+                                                    if(stationString[k][0] == null) {
+                                                        stationList.add(nodenm);
+                                                        stationString[k][0] = nodenm;
+                                                        stationString[k][1] = nodeid;
+                                                        break;
+                                                    }
+                                                }
+
+                                                break;
+                                            }
+
+                                            if(stationString[j][0].equals(nodenm)) {
+                                                for(int k = 1; ; k++) {
+                                                    if(stationString[j][k] == null) {
+                                                        stationString[j][k] = nodeid;
+                                                        isDone = true;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+
+                                            if(isDone)
+                                                break;
+                                        }
+                                    }
+
+                                    for(int i = 0; stationString[i][0] != null; i++) {
+                                        for(int j = 0; stationString[i][j] != null; j++) {
+                                            System.out.println(stationString[i][j]);
+                                        }
+                                    }
+
+                                    arrayAdapter = new ArrayAdapter(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, stationList);
+
+                                    runOnUiThread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            spinner1.setAdapter(arrayAdapter);
+
+                                            tv.setText(city);
+                                        }
+                                    });
                                 }
-                            }, 0);
-
-                            StringBuilder urlBuilder = new StringBuilder("http://openapi.tago.go.kr/openapi/service/BusSttnInfoInqireService/getCrdntPrxmtSttnList"); /*URL*/
-                            urlBuilder.append("?" + URLEncoder.encode("ServiceKey", "UTF-8") + "=EbPZIVMOvAUeHygZz6sAApvBW7YLcSxn3jy%2F195I1Gk9ilGJLGxch4csWd9Ha6aGHZ7qSzBpeOAx1SwJ5RPNAw%3D%3D"); /*Service Key*/
-                            urlBuilder.append("&" + URLEncoder.encode("gpsLati", "UTF-8") + "=" + URLEncoder.encode("36.3", "UTF-8")); /*파라미터설명*/
-                            urlBuilder.append("&" + URLEncoder.encode("gpsLong", "UTF-8") + "=" + URLEncoder.encode("127.3", "UTF-8")); /*파라미터설명*/
-
-                            URL url = new URL(urlBuilder.toString());
-                            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                            conn.setRequestMethod("GET");
-                            conn.setRequestProperty("Content-type", "application/json");
-                            System.out.println("Response code: " + conn.getResponseCode());
-                            BufferedReader rd;
-                            if (conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300) {
-                                rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                             } else {
-                                rd = new BufferedReader(new InputStreamReader(conn.getErrorStream()));
+                                gpsInfo.showSettingsAlert();
                             }
-                            sb = new StringBuilder();
-                            String line;
-                            while ((line = rd.readLine()) != null) {
-                                sb.append(line);
-                            }
-                            rd.close();
-                            conn.disconnect();
 
-                            apiParserSearch();
-
-
-                        } catch(Exception e) {
-                            Toast.makeText(getApplicationContext(), "ERROR!", Toast.LENGTH_SHORT).show();
+                        } catch (Exception e) {
+                            Toast.makeText(getApplicationContext(), "인터넷이나 GPS 문제이거나, 지원하지 않는 장소입니다.", Toast.LENGTH_SHORT).show();
                         }
                     }
-                }.start();
-
-                //Toast.makeText(getApplicationContext(), sb.toString(), Toast.LENGTH_SHORT).show();
+                }).start();
             }
         });
 
@@ -163,132 +409,88 @@ public class MainActivity extends AppCompatActivity {
                 //Toast.makeText(getApplicationContext(), sb.toString(), Toast.LENGTH_SHORT).show();
             }
         });
-    } // end of onCreate
-
-    private final LocationListener mLocationListener = new LocationListener() {
-        public void onLocationChanged(Location location) {
-            //값은 Location 형태로 리턴되며 좌표 출력 방법은 다음과 같다.
-
-            //Toast.makeText(getApplicationContext(), "3" + location, Toast.LENGTH_SHORT).show();
-
-            //Toast.makeText(getApplicationContext(), "onLocationChanged, location:" + location, Toast.LENGTH_SHORT).show();
-            double longitude = location.getLongitude(); //경도
-            double latitude = location.getLatitude();   //위도
-            double altitude = location.getAltitude();   //고도
-            float accuracy = location.getAccuracy();    //정확도
-            String provider = location.getProvider();   //위치제공자
-            //Gps 위치제공자에 의한 위치변화. 오차범위가 좁다.
-            //Network 위치제공자에 의한 위치변화
-            //Network 위치는 Gps에 비해 정확도가 많이 떨어진다.
-            tv.setText("위치정보 : " + provider + "\n위도 : " + longitude + "\n경도 : " + latitude
-                    + "\n고도 : " + altitude + "\n정확도 : "  + accuracy);
-        }
-        public void onProviderDisabled(String provider) {
-            // Disabled시
-            Toast.makeText(getApplicationContext(), "onProviderDisabled, provider:" + provider, Toast.LENGTH_SHORT).show();
-        }
-
-        public void onProviderEnabled(String provider) {
-            // Enabled시
-            Toast.makeText(getApplicationContext(), "onProviderEnabled, provider:" + provider, Toast.LENGTH_SHORT).show();
-        }
-
-        public void onStatusChanged(String provider, int status, Bundle extras) {
-            // 변경시
-            Toast.makeText(getApplicationContext(), "onStatusChanged, provider:" + provider + ", status:" + status + " ,Bundle:" + extras, Toast.LENGTH_SHORT).show();
-        }
-    };
-
-    public void positionCheck(Location location) {
-        final double longitude = location.getLongitude(); //경도
-        final double latitude = location.getLatitude();   //위도
-        double altitude = location.getAltitude();   //고도
-        float accuracy = location.getAccuracy();    //정확도
-        String provider = location.getProvider();   //위치제공자
-        //Gps 위치제공자에 의한 위치변화. 오차범위가 좁다.
-        //Network 위치제공자에 의한 위치변화
-        //Network 위치는 Gps에 비해 정확도가 많이 떨어진다.
-        tv.setText("위치정보 : " + provider + "\n위도 : " + longitude + "\n경도 : " + latitude
-                + "\n고도 : " + altitude + "\n정확도 : "  + accuracy);
-
-        new Thread() {
-            public void run() {
-                try {
-                    Handler mHandler = new Handler(Looper.getMainLooper());
-                    mHandler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            // 내용
-
-                        }
-                    }, 0);
-
-                    StringBuilder urlBuilder = new StringBuilder("http://openapi.tago.go.kr/openapi/service/BusSttnInfoInqireService/getCrdntPrxmtSttnList"); /*URL*/
-                    urlBuilder.append("?" + URLEncoder.encode("ServiceKey", "UTF-8") + "=EbPZIVMOvAUeHygZz6sAApvBW7YLcSxn3jy%2F195I1Gk9ilGJLGxch4csWd9Ha6aGHZ7qSzBpeOAx1SwJ5RPNAw%3D%3D"); /*Service Key*/
-                    urlBuilder.append("&" + URLEncoder.encode("gpsLati", "UTF-8") + "=" + URLEncoder.encode(latitude + "", "UTF-8")); /*파라미터설명*/
-                    urlBuilder.append("&" + URLEncoder.encode("gpsLong", "UTF-8") + "=" + URLEncoder.encode(longitude + "", "UTF-8")); /*파라미터설명*/
-
-                    URL url = new URL(urlBuilder.toString());
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestMethod("GET");
-                    conn.setRequestProperty("Content-type", "application/json");
-                    System.out.println("Response code: " + conn.getResponseCode());
-                    BufferedReader rd;
-                    if (conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300) {
-                        rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                    } else {
-                        rd = new BufferedReader(new InputStreamReader(conn.getErrorStream()));
-                    }
-                    sb = new StringBuilder();
-                    String line;
-                    while ((line = rd.readLine()) != null) {
-                        sb.append(line);
-                    }
-                    rd.close();
-                    conn.disconnect();
-                } catch(Exception e) {
-                    Toast.makeText(getApplicationContext(), "ERROR!", Toast.LENGTH_SHORT).show();
-                }
-            }
-        }.start();
-
-        xml = sb.toString();
-        Toast.makeText(getApplicationContext(), xml, Toast.LENGTH_SHORT).show();
     }
 
-    public void apiParserSearch() throws Exception {
-        ArrayList<String> arrayList = new ArrayList<String>();
+    public int transformCityName(String cityName) {
+        switch(cityName) {
+            case City.NAME_AHSAN:
+                return City.CODE_AHSAN;
 
-        URL url = new URL("http://openapi.tago.go.kr/openapi/service/BusSttnInfoInqireService/getCrdntPrxmtSttnList?ServiceKey=EbPZIVMOvAUeHygZz6sAApvBW7YLcSxn3jy%2F195I1Gk9ilGJLGxch4csWd9Ha6aGHZ7qSzBpeOAx1SwJ5RPNAw%3D%3D&gpsLati=36.3&gpsLong=127.3");
+            case City.NAME_CHANGWON:
+                return City.CODE_CHANGWON;
 
-        XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
-        factory.setNamespaceAware(true);
-        XmlPullParser xpp = factory.newPullParser();
-        BufferedInputStream bis = new BufferedInputStream(url.openStream());
-        xpp.setInput(bis, "utf-8");
+            case City.NAME_CHEONAN:
+                return City.CODE_CHEONAN;
 
-        String tag = null;
-        int event_type = xpp.getEventType();
+            case City.NAME_CHUNCHEON:
+                return City.CODE_CHUNCHEON;
 
-        ArrayList<String> list = new ArrayList<String>();
+            case City.NAME_CHUNGJOO:
+                return City.CODE_CHUNGJOO;
 
-        String addr = null;
-        while (event_type != XmlPullParser.END_DOCUMENT) {
-            if (event_type == XmlPullParser.START_TAG) {
-                tag = xpp.getName();
-            } else if (event_type == XmlPullParser.TEXT) {
-                if(tag.equals("nodenm")) {
-                    arrayList.add(xpp.getText());
-                }
-            } else if (event_type == XmlPullParser.END_TAG) {
-                tag = xpp.getName();
-                if (tag.equals("item")) {
-                    list.add(addr);
-                }
-            }
+            case City.NAME_DAEGU:
+                return City.CODE_DAEGU;
 
-            event_type = xpp.next();
+            case City.NAME_DAEJUN:
+                return City.CODE_DAEJUN;
+
+            case City.NAME_GEOJAE:
+                return City.CODE_GEOJAE;
+
+            case City.NAME_GIMHAE:
+                return City.CODE_GIMHAE;
+
+            case City.NAME_GOONSAN:
+                return City.CODE_GOONSAN;
+
+            case City.NAME_GWANGJOO:
+                return City.CODE_GWANGJOO;
+
+            case City.NAME_GWANGYANG:
+                return City.CODE_GWANGYANG;
+
+            case City.NAME_GYEONGSAN:
+                return City.CODE_GYEONGSAN;
+
+            case City.NAME_SEOUL:
+            case City.NAME_INCHEON:
+                return City.CODE_INCHEON;
+
+            case City.NAME_JEJU:
+                return City.CODE_JEJU;
+
+            case City.NAME_JEONJOO:
+                return City.CODE_JEONJOO;
+
+            case City.NAME_JINJOO:
+                return City.CODE_JINJOO;
+
+            case City.NAME_MILYANG:
+                return City.CODE_MILYANG;
+
+            case City.NAME_POHANG:
+                return City.CODE_POHANG;
+
+            case City.NAME_SOONCHEON:
+                return City.CODE_SOONCHEON;
+
+            case City.NAME_TONGYEONG:
+                return City.CODE_TONGYEONG;
+
+            case City.NAME_ULSAN:
+                return City.CODE_ULSAN;
+
+            case City.NAME_WONJOO:
+                return City.CODE_WONJOO;
+
+            case City.NAME_YANGSAN:
+                return City.CODE_YANGSAN;
+
+            case City.NAME_YEOSOO:
+                return City.CODE_YEOSOO;
+
+            default:
+                return -1;
         }
     }
-
-} // end of class
+}

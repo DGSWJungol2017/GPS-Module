@@ -1,3 +1,22 @@
 <resources>
     <string name="app_name">koi</string>
+    <string name="URL_HEAD">http://openapi.tago.go.kr/openapi/service/</string>
+    <string name="API_KEY">EbPZIVMOvAUeHygZz6sAApvBW7YLcSxn3jy%2F195I1Gk9ilGJLGxch4csWd9Ha6aGHZ7qSzBpeOAx1SwJ5RPNAw%3D%3D</string>
+
+<!--    <string-array name="station">
+        <item>정류장1</item>
+        <item>정류장2</item>
+    </string-array>
+
+    <string-array name="bus">
+        <item>버스1</item>
+        <item >버스2</item>
+    </string-array>
+
+    <string-array name="destination">
+        <item>목적지1</item>
+        <item>목적지2</item>
+
+    </string-array>-->
+
 </resources>

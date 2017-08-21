@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string-array name="city">
+<!--    <string-array name="city">
         <item >서울</item>
         <item >경기</item>
         <item >부천</item>
@@ -19,5 +19,5 @@
         <item >구지청아람</item>
         <item >구지면사무스</item>
 
-    </string-array>
+    </string-array>-->
 </resources>

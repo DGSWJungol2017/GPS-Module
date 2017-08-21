@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
-    android:orientation="vertical" >
+    android:orientation="vertical">
 
     <TextView
         android:id="@+id/textView1"
@@ -35,5 +35,33 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Near My Position"/>
+
+    <android.support.v7.widget.AppCompatSpinner
+        android:id="@+id/stationSpinner"
+        android:layout_width="150dp"
+        android:layout_height="32dp"
+        android:layout_marginBottom="8dp"
+        android:layout_marginEnd="29dp"
+        android:layout_marginRight="29dp"
+        android:layout_marginTop="8dp"/>
+
+    <android.support.v7.widget.AppCompatSpinner
+        android:id="@+id/busSpinner"
+        android:layout_width="150dp"
+        android:layout_height="32dp"
+        android:layout_marginBottom="8dp"
+        android:layout_marginEnd="29dp"
+        android:layout_marginRight="29dp"
+        android:layout_marginTop="8dp" />
+
+    <android.support.v7.widget.AppCompatSpinner
+        android:id="@+id/destSpinner"
+        android:layout_width="150dp"
+        android:layout_height="32dp"
+        android:layout_marginBottom="8dp"
+        android:layout_marginEnd="29dp"
+        android:layout_marginRight="29dp"
+        android:layout_marginTop="8dp" />
+
 
 </LinearLayout>
